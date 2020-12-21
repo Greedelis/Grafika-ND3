@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Three JS Example</title>
+    <script type="text/javascript" src="libs/three.js"></script>
+    <script type="text/javascript" src="libs/jquery-1.9.0.js"></script>
+    <script type="text/javascript" src="libs/OrbitControls.js"></script>
+    <script type="text/javascript" src="libs/ConvexHull.js"></script>
+    <script type="text/javascript" src="libs/ConvexGeometryOld.js"></script>
+
+    <script type="text/javascript" src="libs/stats.js"></script>
+    <script type="text/javascript" src="libs/dat.gui.js"></script>
+    <style>
+        body{
+            /* set margin to 0 and overflow to hidden, to go fullscreen */
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+  </head>
+  <body>
+
+    <div id="WebGL-output">
+    </div>
+    <script type="text/javascript">
+
+    $(function () {
+      var r = 32;
+      var R = 5;
+      var height = 100;
+      var scene = new THREE.Scene();
+      var torGroup;
+      var hullMesh;
+      var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000 );
+      camera.position.y = 140;
+      camera.position.x = -140;
+      camera.position.z = 70;
+      camera.lookAt(scene.position);
+
+      var texture = new THREE.TextureLoader().load( 'https://i.imgur.com/xhRGQLu.png',function ( texture ) {
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
+        texture.offset.set( 0, 0);	
+        texture.repeat.set( 40, 4);} 
+      );
+      var material = new THREE.MeshBasicMaterial( { map: texture} );
+      texture.repeat.set( 1, 1);
+      material = new THREE.MeshBasicMaterial( { map: texture} );
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setClearColor(0xEEEEEE, 1.0);
+      renderer.setSize( window.innerWidth, window.innerHeight );
+      renderer.shadowMap.enabled = true;
+      
+      var controls = new THREE.OrbitControls( camera, renderer.domElement );
+      var plane = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshLambertMaterial({color: 0xffffff}));
+      plane.position.y = -2.5;
+      plane.rotation.x = -Math.PI/2;
+      plane.rleceiveShadow = true;
+     
+      const datGui  = new dat.GUI({ autoPlace: true });
+      datGui.domElement.id = 'gui' 
+      var params = new function(){
+  
+        this.r = 4;
+        this.R = 4;
+        this.points = 5000;
+        this.redraw = function() {
+          scene.remove(torGroup);
+          scene.remove(hullMesh);
+          generatePoints(this.r, this.R, material)
+        }
+        this.update = function () {
+          scene.remove(torGroup);
+          scene.remove(hullMesh);
+          generatePoints(this.r, this.R, material);
+        }
+      }
+      const light = new THREE.AmbientLight( 0x404040 );
+      var spotLight = new THREE.SpotLight( 0xffffff, 0.9);
+      spotLight.position.set(0, 220, 0);
+      spotLight.castShadow = true
+  
+      datGui.add(params, "r", 1, 10).onChange(function(){
+        params.update();
+      });
+      datGui.add(params, "R", 1, 20).onChange(function(){
+        params.update();
+      });
+      datGui.add(params, "points", 100, 50000).onChange(function(){
+        params.update();
+      });
+      datGui.add(params, "redraw");
+      generatePoints(params.r, params.R, material);
+
+
+      function animate(){
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+        //hullMesh.rotation.y += 0.05;
+      }
+
+      function generatePoints(r, R, texture){
+        var points = [];
+        var min = 0;
+        var uvPoints = [];
+        var pointCount = params.points;
+        var pointC = 0;
+        var maxFails = 100000000;
+        var fails = 0;
+        var epsilon = 0.2;
+        torGroup = new THREE.Group();
+
+        while (pointCount > pointC){
+          var test = r+R;
+          var x = Math.random() * (test*4) - test*2;
+				  var y = Math.random() * (r * 2)  - r;
+          var z = Math.random() * (test*4) - test*2;
+          var a = (x*x + y*y + z*z - r*r);
+   
+          if(a*a - (4 * R*R * (x*x + z*z)) <= 0){
+            points.push(new THREE.Vector3(x, y, z));
+            var torGeom = new THREE.SphereGeometry(10);
+            var torMesh = new THREE.Mesh(torGeom,  new THREE.MeshBasicMaterial({color: 0xff0000, transparent: false}))
+            torMesh.position.set(x,y,z);
+            torGroup.add(torMesh);
+            pointC++;
+          }
+        
+          else {
+            fails++
+          }
+          if(fails > maxFails)
+          {
+            console.log("FAIL");
+            break;
+          }
+        }
+  
+        //scene.add(torGroup);
+        var hullGeometry = new THREE.ConvexGeometry(points);
+        var faceCount = hullGeometry.faces.length;
+        for(var i = 0; i < faceCount; i++){
+          var uvPoints = [];
+          var verticeX = hullGeometry.vertices[hullGeometry.faces[i].a];
+          var verticeY = hullGeometry.vertices[hullGeometry.faces[i].b];
+          var verticeZ = hullGeometry.vertices[hullGeometry.faces[i].c];
+
+          var u1 = 0.5 + Math.atan2(verticeX.x, verticeX.z) / (2 * Math.PI);
+          var v1 = 0.5 + Math.asin(verticeX.y / params.r) / Math.PI;
+          var u2 = 0.5 + Math.atan2(verticeY.x, verticeY.z) / (2 * Math.PI);
+          var v2 = 0.5 + Math.asin(verticeY.y / params.r) / Math.PI;
+          var u3 = 0.5 + Math.atan2(verticeZ.x, verticeZ.z) / (2 * Math.PI);
+          var v3 = 0.5 + Math.asin(verticeZ.y / params.r) / Math.PI;
+
+          var rightSide = 0.7;
+          var leftSide = 0.3;
+          if ( u1 > rightSide && u2 < leftSide && u3 < leftSide)
+            u1 = u1 - 1;
+          else if ( u2 > rightSide && u1 < leftSide && u3 < leftSide)
+            u2 = u2 - 1;
+          else if ( u3 > rightSide && u1 < leftSide && u2 < leftSide)
+            u3 = u3 - 1;
+          if ( u1 < leftSide && u2 > rightSide && u3 > rightSide)
+            u1 = u1 + 1;
+          else if ( u2 < leftSide && u1 > rightSide && u3 > rightSide)
+            u2 = u2 + 1;
+          else if ( u3 < leftSide && u2 > rightSide && u1 > rightSide)
+            u3 = u3 + 1;
+          uvPoints.push(new THREE.Vector2(u1,v1))
+          uvPoints.push(new THREE.Vector2(u2,v2));
+          uvPoints.push(new THREE.Vector2(u3,v3));
+          hullGeometry.faceVertexUvs[0][i] = uvPoints
+
+        }
+
+        hullGeometry.uvsNeedUpdate = true;
+        //hullMesh = new THREE.Mesh(hullGeometry, new THREE.MeshBasicMaterial({color: 0xff0000, wireframe : true}));
+        hullMesh = new THREE.Mesh(hullGeometry, texture);
+        scene.add(hullMesh);
+          
+          
+        
+      }
+      
+ 
+      $("#WebGL-output").append(renderer.domElement);
+      animate();
+ 
+  });
+
+  </script>
+  </body>
+</html>
