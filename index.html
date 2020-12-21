@@ -115,7 +115,7 @@
           var x = Math.random() * (test*4) - test*2;
 				  var y = Math.random() * (r * 2)  - r;
           var z = Math.random() * (test*4) - test*2;
-          var a = (x*x + y*y + z*z - r*r);
+          var a = (x*x + y*y + z*z + R*R - r*r);
    
           if(a*a - (4 * R*R * (x*x + z*z)) <= 0){
             points.push(new THREE.Vector3(x, y, z));
